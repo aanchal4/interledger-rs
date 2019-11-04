@@ -13,8 +13,7 @@ jobs:
           name: Build
           command: |
             cargo build
-          environment:
-            - PATH: "$HOME/.cargo/bin:$PATH"
+
 
 workflows:
   version: 2
