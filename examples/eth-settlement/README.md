@@ -1,27 +1,4 @@
 <!--!
-# For integration tests
-function pre_test_hook() {
-    if [ $TEST_MODE -eq 1 ] && [ "${CIRCLECI}" = "true" ] && [ ${USE_DOCKER} -eq 1 ]; then
-        # Make tunnels to DOCKER_HOST containers if run on CircleCI.
-        # This is because the docker is not running on the CI container and
-        # we have to connect the following two:
-        #   - 127.0.0.1:xxxx (on CI container)
-        #   - 127.0.0.1:xxxx (on DOCKER_HOST's container:xxxx)
-        # so that we could `curl localhost:xxxx` to connect to DOCKER_HOST's containers.
-        printf "Setting tunnels..."
-        # node
-        ncat -l -k -c "docker exec -i interledger-rs-node_a nc 127.0.0.1 7770" -p 7770 &
-        ncat -l -k -c "docker exec -i interledger-rs-node_b nc 127.0.0.1 7770" -p 8770 &
-        # se
-        ncat -l -k -c "docker exec -i interledger-rs-se_a nc 127.0.0.1 3000" -p 3000 &
-        ncat -l -k -c "docker exec -i interledger-rs-se_b nc 127.0.0.1 3000" -p 3001 &
-        printf "done\n"
-    fi
-    if [ $TEST_MODE -eq 1 ] && [ ${USE_DOCKER} -eq 1 ]; then
-        trap 'output_docker_logs; exit;' 0
-    fi
-}
-
 function post_test_hook() {
     if [ $TEST_MODE -eq 1 ]; then
         test_equals_or_exit '{"balance":-500}' test_http_response_body -H "Authorization: Bearer alice:in_alice" http://localhost:7770/accounts/alice/balance
@@ -29,21 +6,6 @@ function post_test_hook() {
         test_equals_or_exit '{"balance":0}' test_http_response_body -H "Authorization: Bearer alice:alice_password" http://localhost:8770/accounts/alice/balance
         test_equals_or_exit '{"balance":500}' test_http_response_body -H "Authorization: Bearer bob:in_bob" http://localhost:8770/accounts/bob/balance
     fi
-}
-
-function output_docker_logs() {
-    printf "\e[33m%s\e[m" "Writing docker logs..." 1>&2
-    mkdir -p logs
-    docker logs interledger-rs-node_a &> logs/interledger-rs-node_a.log
-    docker logs interledger-rs-node_b &> logs/interledger-rs-node_b.log
-    docker logs interledger-rs-se_a &> logs/interledger-rs-se_a.log
-    docker logs interledger-rs-se_b &> logs/interledger-rs-se_b.log
-    docker logs ganache &> logs/ganache.log
-    docker logs redis-alice_node &> logs/redis-alice_node.log
-    docker logs redis-alice_se &> logs/redis-alice_se.log
-    docker logs redis-bob_node &> logs/redis-bob_node.log
-    docker logs redis-bob_se &> logs/redis-bob_se.log
-    printf "\e[33m%s\e[m\n" "done" 1>&2
 }
 -->
 
@@ -57,13 +19,8 @@ This example shows how to configure Interledger.rs nodes and use an Ethereum net
 
 ## Prerequisites
 
-- [Rust](#rust)
 - [An Ethereum network](#an-ethereum-network) to connect to
 - [Redis](#redis)
-
-### Rust
-
-Because Interledger.rs is written in the Rust language, you need the Rust environment. Refer to the [Getting started](https://www.rust-lang.org/learn/get-started) page or just `curl https://sh.rustup.rs -sSf | sh` and follow the instructions.
 
 ### An Ethereum network
 First, you need an Ethereum network. You can either use a local testnet, a remote testnet, or the mainnet.
@@ -105,73 +62,50 @@ init
 
 printf "Stopping Interledger nodes\n"
 
-if [ "$USE_DOCKER" -eq 1 ]; then
-    $CMD_DOCKER --version > /dev/null || error_and_exit "Uh oh! You need to install Docker before running this example"
-    mkdir -p logs
-    
-    $CMD_DOCKER stop \
-        interledger-rs-node_a \
-        interledger-rs-node_b \
-        interledger-rs-se_a \
-        interledger-rs-se_b \
-        ganache \
-        redis-alice_node \
-        redis-alice_se \
-        redis-bob_node \
-        redis-bob_se 2>/dev/null
-    
-    printf "\n\nRemoving existing Interledger containers\n"
-    $CMD_DOCKER rm \
-        interledger-rs-node_a \
-        interledger-rs-node_b \
-        interledger-rs-se_a \
-        interledger-rs-se_b \
-        ganache \
-        redis-alice_node \
-        redis-alice_se \
-        redis-bob_node \
-        redis-bob_se 2>/dev/null
-else
-    for port in `seq 6379 6382`; do
-        if lsof -Pi :${port} -sTCP:LISTEN -t ; then
-            redis-cli -p ${port} shutdown
-        fi
-    done
-    
-    if [ -f dump.rdb ] ; then
-        rm -f dump.rdb
+for port in `seq 6379 6382`; do
+    if lsof -Pi :${port} -sTCP:LISTEN -t ; then
+        redis-cli -p ${port} shutdown
     fi
-    
-    for port in 8545 7770 8770 3000 3001; do
-        if lsof -tPi :${port} ; then
-            kill `lsof -tPi :${port}`
-        fi
-    done
+done
+
+if [ -f dump.rdb ] ; then
+    rm -f dump.rdb
 fi
 
-run_pre_test_hook
-
-# Aliases don't play nicely with scripts, so this is our faux-alias
-function ilp-cli {
-    cargo run --quiet --bin ilp-cli -- $@
-}
+for port in 8545 7770 8770 3000 3001; do
+    if lsof -tPi :${port} ; then
+        kill `lsof -tPi :${port}`
+    fi
+done
 -->
 
-### 1. Build interledger.rs
-First of all, let's build interledger.rs. (This may take a couple of minutes)
+### 1. Download interledger.rs
+We provide compiled binaries for
+
+- Linux based OSs
+- macOS
+
+#### Linux based OSs
 
 <!--!
-if [ "$USE_DOCKER" -eq 1 ]; then
-    NETWORK_ID=`$CMD_DOCKER network ls -f "name=interledger" --format="{{.ID}}"`
-    if [ -z "${NETWORK_ID}" ]; then
-        printf "Creating a docker network...\n"
-        $CMD_DOCKER network create interledger
-    fi
-else
-    printf "Building interledger.rs... (This may take a couple of minutes)\n"
+if [ $(is_linux) -eq 1 ]; then
 -->
 ```bash
-cargo build --bin ilp-node
+RELEASE_NAME=ilp-node-tag-sample
+curl -L https://github.com/interledger-rs/interledger-rs/releases/download/${RELEASE_NAME}/ilp-node-x86_64-unknown-linux-musl.tar.gz | tar xzv -
+```
+<!--!
+fi
+-->
+
+#### macOS
+
+<!--!
+if [ $(is_macos) -eq 1 ]; then
+-->
+```bash
+RELEASE_NAME=ilp-node-tag-sample
+curl -L https://github.com/interledger-rs/interledger-rs/releases/download/${RELEASE_NAME}/ilp-node-x86_64-apple-darwin.tar.gz | tar xzv -
 ```
 <!--!
 fi
@@ -181,14 +115,7 @@ fi
 
 <!--!
 printf "\nStarting Redis instances..."
-if [ "$USE_DOCKER" -eq 1 ]; then
-    printf "\n"
-    $CMD_DOCKER run --name redis-alice_node -d -p 127.0.0.1:6379:6379 --network=interledger redis:5.0.5
-    $CMD_DOCKER run --name redis-alice_se -d -p 127.0.0.1:6380:6379 --network=interledger redis:5.0.5
-    $CMD_DOCKER run --name redis-bob_node -d -p 127.0.0.1:6381:6379 --network=interledger redis:5.0.5
-    $CMD_DOCKER run --name redis-bob_se -d -p 127.0.0.1:6382:6379 --network=interledger redis:5.0.5
-else
-    redis-server --version > /dev/null || error_and_exit "Uh oh! You need to install redis-server before running this example"
+redis-server --version > /dev/null || error_and_exit "Uh oh! You need to install redis-server before running this example"
 -->
 
 ```bash
@@ -209,17 +136,12 @@ fi
 
 sleep 2
 printf "done\n"
-
-if [ "$USE_DOCKER" -eq 0 ]; then
 -->
 ```bash
 for port in `seq 6379 6382`; do
     redis-cli -p $port flushall
 done
 ```
-<!--!
-fi
--->
 
 When you want to watch logs, use the `tail` command. You can use the command like: `tail -f logs/redis-a-node.log`
 
@@ -229,25 +151,11 @@ This will launch an Ethereum testnet with 10 prefunded accounts. The mnemonic is
 
 <!--!
 printf "\nStarting local Ethereum testnet\n"
-
-if [ "$USE_DOCKER" -eq 1 ]; then
-    $CMD_DOCKER run \
-        -p 127.0.0.1:8545:8545 \
-        --network=interledger \
-        --name=ganache \
-        -id \
-        trufflesuite/ganache-cli \
-        -h 0.0.0.0 \
-        -p 8545 \
-        -m "abstract vacuum mammal awkward pudding scene penalty purchase dinner depart evoke puzzle" \
-        -i 1
-else
 -->
 ```bash
 ganache-cli -m "abstract vacuum mammal awkward pudding scene penalty purchase dinner depart evoke puzzle" -i 1 &> logs/ganache.log &
 ```
 <!--!
-fi
 sleep 3
 -->
 
@@ -258,42 +166,11 @@ The engines are part of a [separate repository](https://github.com/interledger-r
 
 <!--!
 printf "\nStarting settlement engines...\n"
-if [ "$USE_DOCKER" -eq 1 ]; then
-    # Start Alice's settlement engine
-    $CMD_DOCKER run \
-        -p 127.0.0.1:3000:3000 \
-        --network=interledger \
-        --name=interledger-rs-se_a \
-        -td \
-        interledgerrs/settlement-engines ethereum-ledger \
-        --private_key 380eb0f3d505f087e438eca80bc4df9a7faa24f868e69fc0440261a0fc0567dc \
-        --confirmations 0 \
-        --poll_frequency 1000 \
-        --ethereum_url http://ganache:8545 \
-        --connector_url http://interledger-rs-node_a:7771 \
-        --redis_url redis://redis-alice_se:6379/ \
-        --settlement_api_bind_address 0.0.0.0:3000
-    
-    # Start Bob's settlement engine
-    $CMD_DOCKER run \
-        -p 127.0.0.1:3001:3000 \
-        --network=interledger \
-        --name=interledger-rs-se_b \
-        -td \
-        interledgerrs/settlement-engines ethereum-ledger \
-        --private_key cc96601bc52293b53c4736a12af9130abf347669b3813f9ec4cafdf6991b087e \
-        --confirmations 0 \
-        --poll_frequency 1000 \
-        --ethereum_url http://ganache:8545 \
-        --connector_url http://interledger-rs-node_b:7771 \
-        --redis_url redis://redis-bob_se:6379/ \
-        --settlement_api_bind_address 0.0.0.0:3000
-else
-    pushd "${SETTLEMENT_ENGINE_INSTALLL_DIR}" &>/dev/null
-    if [ ! -e "settlement-engines" ]; then
-        git clone https://github.com/interledger-rs/settlement-engines
-    fi
-    pushd settlement-engines &>/dev/null
+pushd "${SETTLEMENT_ENGINE_INSTALLL_DIR}" &>/dev/null
+if [ ! -e "settlement-engines" ]; then
+    git clone https://github.com/interledger-rs/settlement-engines
+fi
+pushd settlement-engines &>/dev/null
 -->
 
 ```bash #
@@ -337,9 +214,8 @@ cargo run --features "ethereum" -- ethereum-ledger \
 ```
 
 <!--!
-    popd &>/dev/null
-    popd &>/dev/null
-fi
+popd &>/dev/null
+popd &>/dev/null
 -->
 
 ### 5. Launch 2 Nodes

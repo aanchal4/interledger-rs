@@ -152,3 +152,19 @@ function test_equals_or_exit() {
         error_and_exit "Test failed. Expected: $expected_value, Got: $TEST_RESULT"
     fi
 }
+
+function is_linux() {
+    if [[ $(uname) =~ Linux ]]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+
+function is_macos() {
+    if [[ $(uname) =~ Darwin ]]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
