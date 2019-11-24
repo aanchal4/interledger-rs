@@ -114,10 +114,10 @@ pub mod spsp {
     pub use interledger_spsp::*;
 }
 
-/// Store implementation backed by Redis
-#[cfg(feature = "store-redis")]
-pub mod store_redis {
-    pub use interledger_store_redis::*;
+/// Data store implementations
+#[cfg(feature = "store")]
+pub mod store {
+    pub use interledger_store::*;
 }
 
 /// STREAM Protocol sender and receiver
