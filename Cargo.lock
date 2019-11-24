@@ -805,7 +805,7 @@ dependencies = [
  "interledger-service-util 0.4.0",
  "interledger-settlement 0.3.0",
  "interledger-spsp 0.4.0",
- "interledger-store-redis 0.4.0",
+ "interledger-store 0.4.0",
  "interledger-stream 0.4.0",
 ]
 
@@ -897,6 +897,7 @@ dependencies = [
  "interledger-service 0.4.0",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "mime 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.9.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.102 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1036,7 +1037,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "interledger-store-redis"
+name = "interledger-store"
 version = "0.4.0"
 dependencies = [
  "bytes 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
